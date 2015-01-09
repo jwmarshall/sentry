@@ -63,15 +63,36 @@ else:
         },
     }
 
+# You should not change this setting after your database has been created
+# unless you have altered all schemas first
+#SENTRY_USE_BIG_INTS = True
 
 # If you're expecting any kind of real traffic on Sentry, we highly recommend
 # configuring the CACHES and Redis settings
 
 ###########
-## CACHE ##
+## Redis ##
 ###########
 
-# You'll need to install the required dependencies for Memcached:
+# Generic Redis configuration used as defaults for various things including:
+# Buffers, Quotas, TSDB
+
+SENTRY_REDIS_OPTIONS = {
+    'hosts': {
+        0: {
+            'host': os.getenv('REDIS_PORT_6379_TCP_ADDR'),
+            'port': 6379,
+        }
+    }
+}
+
+###########
+## Cache ##
+###########
+
+# If you wish to use memcached, install the dependencies and adjust the config
+# as shown:
+#
 #   pip install python-memcached
 #
 # CACHES = {
@@ -80,8 +101,20 @@ else:
 #         'LOCATION': ['127.0.0.1:11211'],
 #     }
 # }
+#
+# SENTRY_CACHE = 'sentry.cache.django.DjangoCache'
 
-# TODO build an official memcached image
+memcached = os.getenv('MEMCACHED_PORT_11211_TCP_ADDR')
+if memcached:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+            'LOCATION': [memcached + ':11211'],
+        }
+    }
+    SENTRY_CACHE = 'sentry.cache.django.DjangoCache'
+else:
+    SENTRY_CACHE = 'sentry.cache.redis.RedisCache'
 
 ###########
 ## Queue ##
@@ -91,11 +124,18 @@ else:
 # information on configuring your queue broker and workers. Sentry relies
 # on a Python framework called Celery to manage queues.
 
-# You can enable queueing of jobs by turning off the always eager setting:
-# CELERY_ALWAYS_EAGER = False
-# BROKER_URL = 'redis://localhost:6379'
+CELERY_ALWAYS_EAGER = False
+BROKER_URL = (
+    'redis://'
+    + SENTRY_REDIS_OPTIONS['hosts'][0]['host']
+    + ':' + SENTRY_REDIS_OPTIONS['hosts'][0]['port']
+)
 
-# TODO figure out how to determine if the user actually wants queueing so we don't just unilaterally enable that for them
+#################
+## Rate Limits ##
+#################
+
+SENTRY_RATELIMITER = 'sentry.ratelimits.redis.RedisRateLimiter'
 
 ####################
 ## Update Buffers ##
@@ -106,30 +146,25 @@ else:
 # numbers of the same events being sent to the API in a short amount of time.
 # (read: if you send any kind of real data to Sentry, you should enable buffers)
 
-# You'll need to install the required dependencies for Redis buffers:
-#   pip install redis hiredis nydus
-#
-# SENTRY_BUFFER = 'sentry.buffer.redis.RedisBuffer'
-# SENTRY_REDIS_OPTIONS = {
-#     'hosts': {
-#         0: {
-#             'host': '127.0.0.1',
-#             'port': 6379,
-#         }
-#     }
-# }
+SENTRY_BUFFER = 'sentry.buffer.redis.RedisBuffer'
 
-redis = os.getenv('REDIS_PORT_6379_TCP_ADDR')
-if redis:
-    SENTRY_BUFFER = 'sentry.buffer.redis.RedisBuffer'
-    SENTRY_REDIS_OPTIONS = {
-        'hosts': {
-            0: {
-                'host': redis,
-                'port': 6379,
-            },
-        },
-    }
+############
+## Quotas ##
+############
+
+# Quotas allow you to rate limit individual projects or the Sentry install as
+# a whole.
+
+SENTRY_QUOTAS = 'sentry.quotas.redis.RedisQuota'
+
+##########
+## TSDB ##
+##########
+
+# The TSDB is used for building charts as well as making things like per-rate
+# alerts possible.
+
+SENTRY_TSDB = 'sentry.tsdb.redis.RedisTSDB'
 
 ################
 ## Web Server ##
