@@ -16,6 +16,7 @@ RUN pip install redis hiredis nydus
 ENV SENTRY_VERSION 7.1.4
 
 RUN pip install sentry==$SENTRY_VERSION
+RUN pip install sentry-slack
 
 COPY sentry.conf.py /home/user/.sentry/
 RUN chown -R user:user /home/user/.sentry # TODO this might not work on AUFS sometimes
